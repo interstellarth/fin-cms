@@ -19,6 +19,7 @@ interface Tag {
   slug: string;
   color: string;
   description?: string;
+  post_count: number; // ✅ เพิ่ม count
 }
 
 export default function TagTable() {
@@ -60,6 +61,7 @@ export default function TagTable() {
             <TableCell><strong>Slug</strong></TableCell>
             <TableCell><strong>Color</strong></TableCell>
             <TableCell><strong>Description</strong></TableCell>
+            <TableCell align="right"><strong>Post Count</strong></TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -78,6 +80,7 @@ export default function TagTable() {
                 />
               </TableCell>
               <TableCell>{tag.description || "-"}</TableCell>
+              <TableCell align="right">{tag.post_count}</TableCell>
             </TableRow>
           ))}
         </TableBody>
