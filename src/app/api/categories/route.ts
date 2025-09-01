@@ -1,46 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-// ✅ GET: fetch categories with optional search, pagination
+// Pick ONE canonical timestamp column that actually exists in your DB.
+// If your table uses created_at (recommended), keep this.
+// If not, switch to "createddate" or "created_date".
+const ORDER_COLUMN = "created_at";
+
+function parseIntSafe(v: string | null, fallback: number) {
+  const n = Number.parseInt(v ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// ✅ GET: fetch categories with optional search + pagination
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const search = searchParams.get("search")?.toLowerCase() || "";
+    const page = parseIntSafe(searchParams.get("page"), 1);
+    const limit = parseIntSafe(searchParams.get("limit"), 10);
+    const search = (searchParams.get("search") || "").trim();
 
-    let baseQuery = supabase.from("categories");
+    // base query
+    let q = supabase.from("categories");
 
     // filter
     if (search) {
-      // @ts-ignore: 'or' exists at runtime, but is missing from the type definition
-      baseQuery = (baseQuery as any).or(
+      // name/description may be NULL, ilike handles fine
+      // @ts-ignore supabase-js has .or at runtime
+      q = (q as any).or(
         `name.ilike.%${search}%,description.ilike.%${search}%`
       );
     }
 
-    // count
-    const countRes = await baseQuery.select("*", {
-      count: "exact",
-      head: true,
-    });
-    if (countRes.error) {
-      console.error("Count error:", countRes.error.message);
-      return NextResponse.json(
-        { error: "Failed to count categories" },
-        { status: 500 }
-      );
-    }
-    const count = countRes.count || 0;
+    // count (HEAD) — get accurate total without fetching rows
+    const countRes = await q
+      .select("*", { count: "exact", head: true })
+      .throwOnError();
+    const total = countRes.count ?? 0;
 
-    // fetch data
-    const { data, error } = await baseQuery
+    // data
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    // Use an existing column for order. If ORDER_COLUMN doesn't exist,
+    // this throws; change ORDER_COLUMN to a real column in your table.
+    const { data, error } = await q
       .select("*")
-      .order("createdDate", { ascending: false }) // 🟡 Ensure this column exists!
-      .range((page - 1) * limit, page * limit - 1);
+      .order(ORDER_COLUMN as any, { ascending: false })
+      .range(from, to);
 
     if (error) {
-      console.error("Supabase fetch error:", error.message);
+      // Log full details for PostgREST errors:
+      console.error("Supabase fetch error:", {
+        message: error.message,
+        code: error.code,
+        details: (error as any).details,
+        hint: (error as any).hint,
+      });
       return NextResponse.json(
         { error: "Failed to fetch categories" },
         { status: 500 }
@@ -48,24 +63,25 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      data: data || [],
-      total: count,
+      data: data ?? [],
+      total,
       page,
       limit,
-      totalPages: Math.ceil(count / limit),
+      totalPages: Math.ceil(total / limit),
     });
-  } catch (error: any) {
-    console.error("❌ categories route GET failed:", error.message || error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    console.error("❌ categories GET failed:", {
+      message: err?.message ?? String(err),
+      stack: err?.stack,
+    });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
 // ✅ POST: insert new category
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json();
     const {
       name,
       slug,
@@ -78,7 +94,7 @@ export async function POST(req: NextRequest) {
       fbDesc,
       tagHeader,
       tagFooter,
-    } = await req.json();
+    } = body || {};
 
     if (!name || !slug) {
       return NextResponse.json(
@@ -87,6 +103,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // check duplicates (name OR slug)
     const { data: existing, error: checkError } = await supabase
       .from("categories")
       .select("id")
@@ -94,7 +111,12 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (checkError) {
-      console.error("Check existing error:", checkError.message);
+      console.error("Check existing error:", {
+        message: checkError.message,
+        code: checkError.code,
+        details: (checkError as any).details,
+        hint: (checkError as any).hint,
+      });
       return NextResponse.json(
         { error: "Failed to check category" },
         { status: 500 }
@@ -108,29 +130,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Build payload with snake_case column names that actually exist.
+    // IMPORTANT: Do NOT set createdDate here—use a DB default on created_at.
     const insertPayload = {
       name,
       slug,
       color,
       description,
-      meta_title: metaTitle,
-      meta_description: metaDesc,
-      canonical_url: canonicalUrl,
-      fb_title: fbTitle,
-      fb_description: fbDesc,
-      tag_header: tagHeader,
-      tag_footer: tagFooter,
-      createdDate: new Date().toISOString(), // ✅ Ensure column exists
+      meta_title: metaTitle ?? null,
+      meta_description: metaDesc ?? null,
+      canonical_url: canonicalUrl ?? null,
+      fb_title: fbTitle ?? null,
+      fb_description: fbDesc ?? null,
+      tag_header: tagHeader ?? null,
+      tag_footer: tagFooter ?? null,
+      // created_at handled by DB default (now())
     };
 
     const { data, error } = await supabase
       .from("categories")
       .insert(insertPayload)
-      .select()
+      .select("*")
       .single();
 
     if (error) {
-      console.error("Insert error:", error.message);
+      console.error("Insert error:", {
+        message: error.message,
+        code: error.code,
+        details: (error as any).details,
+        hint: (error as any).hint,
+      });
       return NextResponse.json({ error: "Insert failed" }, { status: 500 });
     }
 
@@ -138,11 +167,11 @@ export async function POST(req: NextRequest) {
       { message: "Category created", data },
       { status: 201 }
     );
-  } catch (error: any) {
-    console.error("❌ POST categories failed:", error.message || error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    console.error("❌ categories POST failed:", {
+      message: err?.message ?? String(err),
+      stack: err?.stack,
+    });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
