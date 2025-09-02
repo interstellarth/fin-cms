@@ -1,63 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase"; // อย่าลืมสร้างไฟล์นี้
+import { supabase } from "@/lib/supabase";
 
-// GET: fetch tags with optional pagination & search
+const ORDER_COLUMN = "created_at";
+
+function toInt(v: string | null, def: number) {
+  const n = Number.parseInt(v ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+
+// ---------- GET /api/tags ----------
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const search = searchParams.get("search")?.toLowerCase() || "";
+    const page  = toInt(searchParams.get("page"), 1);
+    const limit = toInt(searchParams.get("limit"), 10);
+    const search = (searchParams.get("search") || "").trim().replaceAll(",", " ");
 
-    let query = supabase.from("tags");
+    const from = (page - 1) * limit;
+    const to   = from + limit - 1;
 
-    // filter by search
-    if (search) {
-      // @ts-ignore: 'or' exists at runtime, but is missing from the type definition
-      query = (query as any).or(
-        `name.ilike.%${search}%,description.ilike.%${search}%`
-      );
-    }
+    const base = () => {
+      let q: any = supabase.from("tags");
+      if (search) {
+        // @ts-ignore: .or exists at runtime
+        q = q.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+      }
+      return q;
+    };
 
-    // total count
-    const { count, error: countError } = await query.select("*", {
+    // Count (HEAD)
+    const { count, error: countError } = await base().select("*", {
       count: "exact",
       head: true,
     });
-
     if (countError) {
-      console.error("❌ Count error:", countError.message || countError);
+      console.error("❌ Count error (tags):", countError);
       return NextResponse.json({ error: "Count failed" }, { status: 500 });
     }
 
-    // fetch data
-    const { data, error } = await query
+    // Data ordered by a real column
+    const { data, error } = await base()
       .select("*")
-      .order("createdDate", { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
+      .order(ORDER_COLUMN as any, { ascending: false })
+      .range(from, to);
 
     if (error) {
-      console.error("❌ Supabase fetch error:", error.message || error);
-      return NextResponse.json(
-        { error: "Failed to fetch tags" },
-        { status: 500 }
-      );
+      console.error("❌ Supabase fetch error (tags):", {
+        message: error.message,
+        code: (error as any).code,
+        details: (error as any).details,
+        hint: (error as any).hint,
+      });
+      return NextResponse.json({ error: "Failed to fetch tags" }, { status: 500 });
     }
 
     return NextResponse.json({
-      data: data || [],
-      total: count || 0,
+      data: data ?? [],
+      total: count ?? 0,
       page,
       limit,
-      totalPages: Math.ceil((count || 0) / limit),
+      totalPages: Math.ceil((count ?? 0) / limit),
     });
-  } catch (error: any) {
-    console.error("❌ GET error:", error.message || error);
+  } catch (e: any) {
+    console.error("❌ GET /tags failed:", e?.message ?? String(e));
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
-// POST: create new tag
+// ---------- POST /api/tags ----------
 export async function POST(req: NextRequest) {
   try {
     const {
@@ -77,74 +87,50 @@ export async function POST(req: NextRequest) {
     } = await req.json();
 
     if (!name || !slug) {
-      return NextResponse.json(
-        { error: "Missing name or slug" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing name or slug" }, { status: 400 });
     }
 
-    // check duplicate
-    const { data: existingTag, error: checkError } = await supabase
-      .from("tags")
-      .select("id")
-      .or(`name.eq.${name},slug.eq.${slug}`)
-      .maybeSingle();
-
-    if (checkError) {
-      console.error("❌ Check error:", checkError.message || checkError);
-      return NextResponse.json(
-        { error: "Failed to check existing tag" },
-        { status: 500 }
-      );
-    }
-
-    if (existingTag) {
-      return NextResponse.json(
-        { error: "Tag already exists" },
-        { status: 409 }
-      );
-    }
+    // Build payload using existing DB columns only (no createdDate)
+    const payload = {
+      name,
+      slug: String(slug).trim().toLowerCase(), // normalize to match index(lower(slug))
+      color,
+      description: description ?? null,
+      meta_title: metaTitle ?? null,
+      meta_description: metaDesc ?? null,
+      canonical_url: canonicalUrl ?? null,
+      x_title: xTitle ?? null,
+      x_description: xDesc ?? null,
+      fb_title: fbTitle ?? null,
+      fb_description: fbDesc ?? null,
+      tag_header: tagHeader ?? null,
+      tag_footer: tagFooter ?? null,
+      // created_at handled by DB default
+    };
 
     const { data, error } = await supabase
       .from("tags")
-      .insert([
-        {
-          name,
-          slug,
-          color,
-          description,
-          meta_title: metaTitle,
-          meta_description: metaDesc,
-          canonical_url: canonicalUrl,
-          x_title: xTitle,
-          x_description: xDesc,
-          fb_title: fbTitle,
-          fb_description: fbDesc,
-          tag_header: tagHeader,
-          tag_footer: tagFooter,
-          createdDate: new Date().toISOString(), // ✅ ต้องมีในตาราง
-        },
-      ])
-      .select()
+      .insert(payload)
+      .select("*")
       .single();
 
     if (error) {
-      console.error("❌ Insert error:", error.message || error);
-      return NextResponse.json(
-        { error: "Failed to create tag" },
-        { status: 500 }
-      );
+      // Unique violation => 23505
+      if ((error as any).code === "23505") {
+        return NextResponse.json({ error: "Tag already exists" }, { status: 409 });
+      }
+      console.error("❌ Insert error (tags):", {
+        message: error.message,
+        code: (error as any).code,
+        details: (error as any).details,
+        hint: (error as any).hint,
+      });
+      return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
     }
 
-    return NextResponse.json(
-      { message: "Tag created successfully", data },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error("❌ POST error:", error.message || error);
-    return NextResponse.json(
-      { error: "Failed to create tag" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Tag created successfully", data }, { status: 201 });
+  } catch (e: any) {
+    console.error("❌ POST /tags failed:", e?.message ?? String(e));
+    return NextResponse.json({ error: "Failed to create tag" }, { status: 500 });
   }
 }
