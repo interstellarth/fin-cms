@@ -57,11 +57,20 @@ const AuthLogin = ({ title, subtitle, subtext }: loginType) => {
 
       if (response.ok) {
         // Store the token using auth utilities
-        authUtils.setToken(data);
+        authUtils.setToken({ accessToken: data.accessToken, expiresIn: data.expiresIn });
 
-        // Save user info to localStorage
-        if (data.user) {
-          localStorage.setItem("user", JSON.stringify(data.user));
+        // Save user info to localStorage (with fallback fetch)
+        try { sessionStorage.setItem("lastUsername", formData.username); } catch {}
+        let userInfo = data.user;
+        if (!userInfo || !userInfo.id) {
+          try {
+            const ures = await fetch(`/api/users?username=${encodeURIComponent(formData.username)}`);
+            const ujson = await ures.json();
+            if (ures.ok && ujson?.data) userInfo = ujson.data;
+          } catch {}
+        }
+        if (userInfo) {
+          localStorage.setItem("user", JSON.stringify(userInfo));
         }
 
         // Redirect to dashboard

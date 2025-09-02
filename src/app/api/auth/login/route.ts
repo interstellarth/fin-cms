@@ -17,32 +17,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash the provided password
-    const hashedPassword = hashPassword(password);
-    // Check user credentials
-    const { data, error } = await supabase
+    // Fetch by username first, then verify password here
+    const { data: row, error } = await supabase
       .from("users")
-      .select("id, username, email, role")
+      .select("id, username, email, role, password")
       .eq("username", username)
-      .eq("password", password);
+      .maybeSingle();
 
-    if (error || !data) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+    if (error || !row) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Generate a simple token (in production, use JWT)
+    const hashed = hashPassword(password);
+    const passOk = row.password === password || row.password === hashed;
+    if (!passOk) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
     const token = crypto.randomBytes(32).toString("hex");
 
     return NextResponse.json({
       accessToken: token,
       expiresIn: 3600,
       user: {
-        username: data[0]?.username,
-        email: data[0]?.email,
-        role: data[0]?.role,
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        role: row.role,
       },
     });
   } catch (error) {

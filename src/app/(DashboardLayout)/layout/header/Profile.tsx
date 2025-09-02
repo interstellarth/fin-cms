@@ -35,12 +35,38 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window === "undefined") return;
+    const applyFromStorage = () => {
       const userData = localStorage.getItem("user");
       if (userData) {
-        setUser(JSON.parse(userData));
+        try { setUser(JSON.parse(userData)); } catch { setUser(null); }
+        return true;
+      }
+      return false;
+    };
+
+    const ok = applyFromStorage();
+    if (!ok) {
+      // Fallback: try fetch by last known username from sessionStorage
+      const lastUsername = sessionStorage.getItem("lastUsername");
+      if (lastUsername) {
+        fetch(`/api/users?username=${encodeURIComponent(lastUsername)}`)
+          .then((r) => r.json())
+          .then((j) => {
+            if (j?.data) {
+              setUser(j.data);
+              try { localStorage.setItem("user", JSON.stringify(j.data)); } catch {}
+            }
+          })
+          .catch(() => {});
       }
     }
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "user") applyFromStorage();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const handleClick2 = (event: any) => {
