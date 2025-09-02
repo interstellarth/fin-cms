@@ -11,8 +11,20 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Alert,
 } from "@mui/material";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .normalize("NFKD") // drop accents
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 export default function NewCategoryPage() {
   const [name, setName] = useState("");
@@ -22,28 +34,38 @@ export default function NewCategoryPage() {
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDesc, setMetaDesc] = useState("");
   const [canonicalUrl, setCanonicalUrl] = useState("");
-  const [header, setHeader] = useState("");
-  const [footer, setFooter] = useState("");
+  const [tagHeader, setTagHeader] = useState("");
+  const [tagFooter, setTagFooter] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [openModal, setOpenModal] = useState(false);
+  const [savedName, setSavedName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const isValid = useMemo(() => {
+    return name.trim().length > 0 && slug.trim().length > 0;
+  }, [name, slug]);
+
   const handleSave = async () => {
+    if (!isValid) {
+      setError("Please fill in Name and Slug.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
       const payload = {
-        name,
-        slug,
+        name: name.trim(),
+        slug: slugify(slug),
         color,
         description,
         metaTitle,
         metaDesc,
         canonicalUrl,
-        header,
-        footer,
+        tagHeader, // ✅ match API -> DB tag_header
+        tagFooter, // ✅ match API -> DB tag_footer
       };
 
       const res = await fetch("/api/categories", {
@@ -52,12 +74,16 @@ export default function NewCategoryPage() {
         body: JSON.stringify(payload),
       });
 
+      const json = await res.json();
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || "Failed to save category");
+        throw new Error(json?.error || "Failed to save category");
       }
 
+      // Keep a copy for the dialog before clearing
+      setSavedName(payload.name);
       setOpenModal(true);
+
+      // reset form
       setName("");
       setSlug("");
       setColor("#1976d2");
@@ -65,10 +91,10 @@ export default function NewCategoryPage() {
       setMetaTitle("");
       setMetaDesc("");
       setCanonicalUrl("");
-      setHeader("");
-      setFooter("");
+      setTagHeader("");
+      setTagFooter("");
     } catch (err: any) {
-      setError(err.message || "Unknown error");
+      setError(err?.message || "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -76,7 +102,8 @@ export default function NewCategoryPage() {
 
   const onNameChange = (val: string) => {
     setName(val);
-    setSlug(val.toLowerCase().trim().replace(/\s+/g, "-"));
+    // auto-generate slug only if user hasn't typed a custom one yet
+    if (!slug) setSlug(slugify(val));
   };
 
   return (
@@ -97,13 +124,14 @@ export default function NewCategoryPage() {
         <TextField
           label="Slug"
           value={slug}
-          onChange={(e) => setSlug(e.target.value)}
+          onChange={(e) => setSlug(slugify(e.target.value))}
+          helperText="Lowercase URL-safe text, e.g. my-new-category"
           fullWidth
           required
         />
 
         <Box>
-          <Typography>Color</Typography>
+          <Typography sx={{ mb: 1 }}>Color</Typography>
           <input
             type="color"
             value={color}
@@ -141,13 +169,14 @@ export default function NewCategoryPage() {
           label="Canonical URL"
           value={canonicalUrl}
           onChange={(e) => setCanonicalUrl(e.target.value)}
+          placeholder="https://www.example.com/path"
           fullWidth
         />
 
         <TextField
           label="Header (Code Injection)"
-          value={header}
-          onChange={(e) => setHeader(e.target.value)}
+          value={tagHeader}
+          onChange={(e) => setTagHeader(e.target.value)}
           multiline
           rows={3}
           fullWidth
@@ -155,24 +184,20 @@ export default function NewCategoryPage() {
 
         <TextField
           label="Footer (Code Injection)"
-          value={footer}
-          onChange={(e) => setFooter(e.target.value)}
+          value={tagFooter}
+          onChange={(e) => setTagFooter(e.target.value)}
           multiline
           rows={3}
           fullWidth
         />
 
-        {error && (
-          <Typography color="error" variant="body2">
-            {error}
-          </Typography>
-        )}
+        {error && <Alert severity="error">{error}</Alert>}
 
         <Button
           variant="contained"
           color="primary"
           onClick={handleSave}
-          disabled={loading}
+          disabled={loading || !isValid}
           fullWidth
           sx={{ mt: 2 }}
         >
@@ -184,7 +209,7 @@ export default function NewCategoryPage() {
         <DialogTitle>🎉 Category Created</DialogTitle>
         <DialogContent>
           <Typography>
-            The category &quot;{name}&quot; has been saved.
+            The category &quot;{savedName}&quot; has been saved.
           </Typography>
         </DialogContent>
         <DialogActions>
