@@ -30,7 +30,8 @@ const renderMenuItems = (
 ) => {
   return items.map((item: any) => {
     const Icon = item.icon ? item.icon : IconPoint;
-    const itemIcon = <Icon stroke={1.5} size="1.3rem" />;
+    // Avoid React warning: width/height should be numbers, not rem
+    const itemIcon = <Icon stroke={1.5} size={21} />;
 
     if (item.subheader) {
       // Display Subheader

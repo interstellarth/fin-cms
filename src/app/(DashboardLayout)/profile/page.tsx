@@ -22,9 +22,11 @@ import { useEffect, useState } from "react";
 type ErrorData = { error?: string };
 
 export default function EditProfilePage() {
+  const [userId, setUserId] = useState<string | number | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // extra fields kept for layout compatibility (not saved to users table)
   const [labels, setLabels] = useState("");
   const [note, setNote] = useState("");
   const [newsletter, setNewsletter] = useState(true);
@@ -33,14 +35,62 @@ export default function EditProfilePage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    // Load user data from localStorage (or fetch from API)
-    const userData = localStorage.getItem("user");
-    if (userData) {
-      const parsed = JSON.parse(userData);
-      setName(parsed.username || "");
-      setEmail(parsed.email || "");
-      // password intentionally not prefilled
-    }
+    const toUiRole = (db: any): string => {
+      const v = typeof db === "string" ? db.toUpperCase() : "";
+      if (v === "ADMIN") return "Admin";
+      if (v === "EDITOR") return "Editor";
+      if (v === "VIEWER" || v === "MEMBER") return "Member";
+      return "Member";
+    };
+    const toDbRole = (ui: string): string => {
+      const v = ui.toLowerCase();
+      if (v === "admin") return "ADMIN";
+      if (v === "editor") return "EDITOR";
+      return "MEMBER"; // map Member -> MEMBER
+    };
+
+    // expose mapper for save
+    (window as any).__roleMapper = { toUiRole, toDbRole };
+
+    const loadUser = async () => {
+      const raw = localStorage.getItem("user");
+      const basic = raw ? JSON.parse(raw) : null;
+      if (basic) {
+        setUserId(basic.id ?? null);
+        setName(basic.username || "");
+        setEmail(typeof basic.email === "string" ? basic.email : "");
+        setRole(toUiRole(basic.role));
+      }
+
+      // Prefer id; if missing, try username or email
+      let data: any = null;
+      if (basic?.id) {
+        const r = await fetch(`/api/users/${basic.id}`);
+        if (r.ok) ({ data } = await r.json());
+      }
+      if (!data && basic?.username) {
+        const r = await fetch(`/api/users?username=${encodeURIComponent(basic.username)}`);
+        if (r.ok) ({ data } = await r.json());
+      }
+      if (!data && basic?.email) {
+        const r = await fetch(`/api/users?email=${encodeURIComponent(basic.email)}`);
+        if (r.ok) ({ data } = await r.json());
+      }
+      if (!data) return;
+
+      setUserId(data.id);
+      setName(data.username || "");
+      setEmail(typeof data.email === "string" ? data.email : "");
+      setRole(toUiRole(data.role));
+
+      try {
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ id: data.id, username: data.username, email: data.email, role: data.role })
+        );
+      } catch {}
+    };
+    loadUser();
   }, []);
 
   const handleSave = async () => {
@@ -55,27 +105,42 @@ export default function EditProfilePage() {
 
       const currentUser = JSON.parse(userData);
 
-      const res = await fetch("/api/members/update", {
+      if (!userId) {
+        setMessage("User id missing; please login again.");
+        return;
+      }
+
+      const idForPath = isNaN(Number(userId)) ? String(userId) : String(Number(userId));
+
+      const res = await fetch(`/api/users/${idForPath}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
+          username: name,
           email,
-          password: password || undefined, // ถ้าไม่กรอก password ใหม่ ก็ไม่ส่ง
-          role,
-          labels: labels ? labels.split(",").map((l) => l.trim()) : [],
-          note,
-          newsletter,
-          userId: currentUser.id, // Add userId to the request
+          password: password || undefined, // optional
+          role: ((window as any)?.__roleMapper?.toDbRole?.(role)) || "MEMBER",
         }),
       });
 
       const result = await res.text();
       if (res.ok) {
         const responseData = JSON.parse(result);
-        // Update localStorage with new user data
-        const updatedUser = { ...currentUser, ...responseData.data };
-        localStorage.setItem("user", JSON.stringify(updatedUser));
+        // Re-fetch latest row to be 100% consistent
+        try {
+          const rereq = await fetch(`/api/users/${idForPath}`);
+          if (rereq.ok) {
+            const { data } = await rereq.json();
+            if (data) {
+              localStorage.setItem("user", JSON.stringify(data));
+              setUserId(data.id);
+              setName(data.username || "");
+              setEmail(typeof data.email === "string" ? data.email : "");
+              const toUi = (window as any)?.__roleMapper?.toUiRole;
+              setRole(toUi ? toUi(data.role) : role);
+            }
+          }
+        } catch {}
 
         setOpenModal(true);
         setMessage("Profile updated successfully!");
@@ -120,7 +185,7 @@ export default function EditProfilePage() {
       <Box display="flex" gap={4} alignItems="flex-start" mb={4}>
         <Box display="flex" flexDirection="column" alignItems="center">
           <Avatar sx={{ width: 80, height: 80, fontSize: 32 }}>
-            {name ? name[0].toUpperCase() : "U"}
+            {(name || email)?.toString()?.charAt(0)?.toUpperCase() || "U"}
           </Avatar>
           <Typography mt={1} fontWeight="medium">
             Edit Profile

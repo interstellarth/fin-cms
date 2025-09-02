@@ -2,7 +2,23 @@ import { supabase } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const email = searchParams.get("email");
+
+  if (email) {
+    const { data, error } = await supabase
+      .from("members")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json(data);
+  }
+
   const { data, error } = await supabase
     .from("members")
     .select("*")
@@ -35,10 +51,7 @@ export async function POST(request: Request) {
           labels: labelsArray,
           note,
           newsletter,
-          status: "Active",
-          open_rate: "N/A",
-          location: "",
-          created_at: new Date().toISOString(),
+          // let DB defaults handle: status ('Free'), created_at, etc.
         },
       ])
       .select()
