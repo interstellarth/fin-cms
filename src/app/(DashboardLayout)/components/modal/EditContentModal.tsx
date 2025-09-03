@@ -1,3 +1,4 @@
+"use client";
 // components/EditContentModal.tsx
 import {
   Dialog,
@@ -17,7 +18,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from "@mui/material";
-import { FC, useRef, useState } from "react";
+import { FC, useRef, useState, useEffect } from "react";
 import {
   IconUpload,
   IconPhoto,
@@ -29,7 +30,16 @@ import {
   IconQuote,
   IconCode,
   IconImageInPicture,
+  IconLink,
+  IconLinkOff,
 } from "@tabler/icons-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
+import Heading from "@tiptap/extension-heading";
+import { supabase } from "@/lib/supabase";
 
 type Content = {
   id?: number;
@@ -64,15 +74,64 @@ const EditContentModal: FC<EditContentModalProps> = ({
   const [textAreaValue, setTextAreaValue] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [showImageDialog, setShowImageDialog] = useState(false);
+  // TipTap editor instance
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+      }),
+      Underline,
+      Image,
+      Link.configure({ openOnClick: false }),
+      Heading.configure({ levels: [1, 2, 3] }),
+    ],
+    content: content?.textHtml || "",
+    onUpdate: ({ editor }) => {
+      onChange("textHtml", editor.getHTML());
+    },
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        style:
+          "min-height:180px; outline:none; white-space:pre-wrap; word-break:break-word;",
+        spellcheck: "false",
+      },
+    },
+  });
+
+  // sync when open new record
+  useEffect(() => {
+    if (editor && content) {
+      editor.commands.setContent(content.textHtml || "", false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, content?.id]);
+
+  // TipTap handles typing behavior; no extra contentEditable tweaks needed
 
   if (!content) return null;
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadToSupabase = async (file: File) => {
+    try {
+      const path = `content/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage
+        .from("images")
+        .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from("images").getPublicUrl(path);
+      return data.publicUrl as string;
+    } catch (e) {
+      return "";
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Create a preview URL for the selected image
-      const imageUrl = URL.createObjectURL(file);
-      onChange("banner", imageUrl);
+      // Try upload to Supabase storage; fallback to local blob URL
+      const publicUrl = await uploadToSupabase(file);
+      if (publicUrl) onChange("banner", publicUrl);
+      else onChange("banner", URL.createObjectURL(file));
     }
   };
 
@@ -86,94 +145,113 @@ const EditContentModal: FC<EditContentModalProps> = ({
   };
 
   const insertHtmlTag = (tag: string) => {
-    const textarea = document.getElementById(
-      "html-editor"
-    ) as HTMLTextAreaElement;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selectedText = textarea.value.substring(start, end);
-
-      let insertText = "";
+    if (editor) {
+      const chain = editor.chain().focus();
       switch (tag) {
         case "bold":
-          insertText = `<strong>${selectedText || "Bold Text"}</strong>`;
-          break;
+          chain.toggleBold().run();
+          return;
         case "italic":
-          insertText = `<em>${selectedText || "Italic Text"}</em>`;
-          break;
+          chain.toggleItalic().run();
+          return;
         case "underline":
-          insertText = `<u>${selectedText || "Underlined Text"}</u>`;
-          break;
+          chain.toggleUnderline().run();
+          return;
+        case "h1":
+          chain.toggleHeading({ level: 1 }).run();
+          return;
+        case "h2":
+          chain.toggleHeading({ level: 2 }).run();
+          return;
+        case "h3":
+          chain.toggleHeading({ level: 3 }).run();
+          return;
         case "ul":
-          insertText = `<ul>\n  <li>${selectedText || "List Item"}</li>\n</ul>`;
-          break;
+          chain.toggleBulletList().run();
+          return;
         case "ol":
-          insertText = `<ol>\n  <li>${selectedText || "List Item"}</li>\n</ol>`;
-          break;
+          chain.toggleOrderedList().run();
+          return;
         case "quote":
-          insertText = `<blockquote>${
-            selectedText || "Quote Text"
-          }</blockquote>`;
-          break;
+          chain.toggleBlockquote().run();
+          return;
         case "code":
-          insertText = `<code>${selectedText || "Code Text"}</code>`;
-          break;
+          chain.toggleCodeBlock().run();
+          return;
+        case "clear":
+          chain.unsetAllMarks().clearNodes().run();
+          return;
         case "image":
           setShowImageDialog(true);
           return;
         default:
-          insertText = selectedText;
+          return;
       }
-
-      const newValue =
-        textarea.value.substring(0, start) +
-        insertText +
-        textarea.value.substring(end);
-      handleTextChange(newValue);
-
-      // Set cursor position after the inserted tag
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(
-          start + insertText.length,
-          start + insertText.length
-        );
-      }, 0);
     }
+
+    const textarea = document.getElementById("html-editor") as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+
+    let insertText = "";
+    switch (tag) {
+      case "bold":
+        if (start !== end) insertText = `<strong>${selectedText}</strong>`;
+        else insertText = `<strong></strong>`;
+        break;
+      case "italic":
+        if (start !== end) insertText = `<em>${selectedText}</em>`;
+        else insertText = `<em></em>`;
+        break;
+      case "underline":
+        if (start !== end) insertText = `<u>${selectedText}</u>`;
+        else insertText = `<u></u>`;
+        break;
+      case "ul":
+        insertText = `<ul>\n  <li>${selectedText || ""}</li>\n</ul>`;
+        break;
+      case "ol":
+        insertText = `<ol>\n  <li>${selectedText || ""}</li>\n</ol>`;
+        break;
+      case "quote":
+        if (start !== end) insertText = `<blockquote>${selectedText}</blockquote>`;
+        else insertText = `<blockquote></blockquote>`;
+        break;
+      case "code":
+        if (start !== end) insertText = `<code>${selectedText}</code>`;
+        else insertText = `<code></code>`;
+        break;
+      case "image":
+        setShowImageDialog(true);
+        return;
+      default:
+        insertText = selectedText;
+    }
+
+    const newValue =
+      textarea.value.substring(0, start) + insertText + textarea.value.substring(end);
+    handleTextChange(newValue);
+
+    setTimeout(() => {
+      textarea.focus();
+      // Place caret inside the inserted tag when empty
+      const caretOffset = (() => {
+        if (start !== end) return start + insertText.length;
+        const openTagLen = insertText.indexOf("</") > -1 ? insertText.indexOf("</") : insertText.length;
+        return start + openTagLen;
+      })();
+      textarea.setSelectionRange(caretOffset, caretOffset);
+    }, 0);
   };
 
   const insertImage = () => {
-    if (imageUrl.trim()) {
-      const textarea = document.getElementById(
-        "html-editor"
-      ) as HTMLTextAreaElement;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const selectedText = textarea.value.substring(start, end);
-
-        const altText = selectedText || "Image";
-        const insertText = `<img src="${imageUrl}" alt="${altText}" style="max-width: 100%; height: auto;" />`;
-
-        const newValue =
-          textarea.value.substring(0, start) +
-          insertText +
-          textarea.value.substring(end);
-        handleTextChange(newValue);
-
-        // Set cursor position after the inserted image tag
-        setTimeout(() => {
-          textarea.focus();
-          textarea.setSelectionRange(
-            start + insertText.length,
-            start + insertText.length
-          );
-        }, 0);
-      }
-      setImageUrl("");
-      setShowImageDialog(false);
-    }
+    if (!imageUrl.trim()) return;
+    if (editor) editor.chain().focus().setImage({ src: imageUrl }).run();
+    setImageUrl("");
+    setShowImageDialog(false);
   };
 
   const handleImageDialogClose = () => {
@@ -199,104 +277,88 @@ const EditContentModal: FC<EditContentModalProps> = ({
           />
 
           <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Content Editor
-            </Typography>
+            <Typography variant="subtitle2" mb={1}>Content Editor</Typography>
 
-            {/* HTML Editor Toolbar */}
-            <Box
-              sx={{
-                mb: 1,
-                p: 1,
-                border: "1px solid #e0e0e0",
-                borderRadius: 1,
-                bgcolor: "#fafafa",
-              }}
-            >
-              <ToggleButtonGroup size="small" sx={{ gap: 0.5 }}>
-                <ToggleButton
-                  value="bold"
-                  onClick={() => insertHtmlTag("bold")}
-                  title="Bold"
-                >
-                  <IconBold size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="italic"
-                  onClick={() => insertHtmlTag("italic")}
-                  title="Italic"
-                >
-                  <IconItalic size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="underline"
-                  onClick={() => insertHtmlTag("underline")}
-                  title="Underline"
-                >
-                  <IconUnderline size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="ul"
-                  onClick={() => insertHtmlTag("ul")}
-                  title="Unordered List"
-                >
-                  <IconList size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="ol"
-                  onClick={() => insertHtmlTag("ol")}
-                  title="Ordered List"
-                >
-                  <IconListNumbers size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="quote"
-                  onClick={() => insertHtmlTag("quote")}
-                  title="Quote"
-                >
-                  <IconQuote size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="code"
-                  onClick={() => insertHtmlTag("code")}
-                  title="Code"
-                >
-                  <IconCode size={16} />
-                </ToggleButton>
-                <ToggleButton
-                  value="image"
-                  onClick={() => insertHtmlTag("image")}
-                  title="Insert Image"
-                >
-                  <IconImageInPicture size={16} />
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+            {/* TipTap Editor */}
 
-            {/* HTML Editor Textarea */}
-            <TextField
-              id="html-editor"
-              value={content.textHtml}
-              onChange={(e) => handleTextChange(e.target.value)}
-              multiline
-              rows={8}
-              fullWidth
-              required
-              placeholder="Enter your content here... Use the toolbar above to format your text."
-              sx={{
-                "& .MuiInputBase-input": {
-                  fontFamily: "monospace",
-                  fontSize: "14px",
-                },
-              }}
-            />
+            {/* Visual or HTML editor */}
+          <Box
+            sx={{
+              border: "1px solid #e0e0e0",
+              borderRadius: 1,
+              p: 1,
+              mb: 1,
+              '& .ProseMirror': {
+                minHeight: 180,
+                outline: 'none',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              },
+            }}
+          >
+            {editor && <EditorContent editor={editor} />}
+          </Box>
+          {/* Toolbar for TipTap */}
+          <Box sx={{ mb: 1 }}>
+            <ToggleButtonGroup size="small" sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+              <ToggleButton value="bold" onClick={() => insertHtmlTag("bold")} title="Bold">
+                <IconBold size={16} />
+              </ToggleButton>
+              <ToggleButton value="italic" onClick={() => insertHtmlTag("italic")} title="Italic">
+                <IconItalic size={16} />
+              </ToggleButton>
+              <ToggleButton value="underline" onClick={() => insertHtmlTag("underline")} title="Underline">
+                <IconUnderline size={16} />
+              </ToggleButton>
+              <ToggleButton value="h1" onClick={() => insertHtmlTag("h1")} title="H1">
+                H1
+              </ToggleButton>
+              <ToggleButton value="h2" onClick={() => insertHtmlTag("h2")} title="H2">
+                H2
+              </ToggleButton>
+              <ToggleButton value="h3" onClick={() => insertHtmlTag("h3")} title="H3">
+                H3
+              </ToggleButton>
+              <ToggleButton value="ul" onClick={() => insertHtmlTag("ul")} title="Unordered List">
+                <IconList size={16} />
+              </ToggleButton>
+              <ToggleButton value="ol" onClick={() => insertHtmlTag("ol")} title="Ordered List">
+                <IconListNumbers size={16} />
+              </ToggleButton>
+              <ToggleButton value="quote" onClick={() => insertHtmlTag("quote")} title="Quote">
+                <IconQuote size={16} />
+              </ToggleButton>
+              <ToggleButton value="code" onClick={() => insertHtmlTag("code")} title="Code Block">
+                <IconCode size={16} />
+              </ToggleButton>
+              <ToggleButton
+                value="link"
+                onClick={() => {
+                  if (!editor) return;
+                  const prev = editor.getAttributes('link').href as string;
+                  const url = window.prompt('Enter URL', prev || 'https://');
+                  if (url === null) return;
+                  if (url === '') editor.chain().focus().unsetLink().run();
+                  else editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+                }}
+                title="Insert/Edit Link"
+              >
+                <IconLink size={16} />
+              </ToggleButton>
+              <ToggleButton value="unlink" onClick={() => editor?.chain().focus().unsetLink().run()} title="Remove Link">
+                <IconLinkOff size={16} />
+              </ToggleButton>
+              <ToggleButton value="image" onClick={() => insertHtmlTag("image")} title="Insert Image">
+                <IconImageInPicture size={16} />
+              </ToggleButton>
+              <ToggleButton value="clear" onClick={() => insertHtmlTag("clear")} title="Clear Formatting">
+                Clear
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
 
-            <Typography
-              variant="caption"
-              color="textSecondary"
-              sx={{ mt: 0.5 }}
-            >
-              Use the toolbar buttons to format your content with HTML tags
+            <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5 }}>
+              Use toolbar to format text visually.
             </Typography>
           </Box>
 
