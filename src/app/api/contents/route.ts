@@ -7,7 +7,18 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const search = searchParams.get("search")?.toLowerCase() || "";
-    const status = searchParams.get("status") || "";
+    const rawStatus = searchParams.get("status") || "";
+
+    // Normalize status texts from UI filters
+    const normalizeStatus = (s: string) => {
+      const t = s.trim().toLowerCase();
+      if (!t || t === "all" || t === "all posts") return "";
+      if (t.startsWith("draft")) return "Draft";
+      if (t.startsWith("publish")) return "Published"; // publish, published, publishe
+      if (t.startsWith("schedule")) return "Scheduled"; // schedule, scheduled
+      return s; // fallback as-is
+    };
+    const status = normalizeStatus(rawStatus);
 
     let query = supabase.from("contents").select("*", { count: "exact" });
 

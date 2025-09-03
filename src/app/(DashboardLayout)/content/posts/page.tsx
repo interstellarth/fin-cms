@@ -18,29 +18,26 @@ const PostsScreen = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editContent, setEditContent] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState("All posts");
+  const [statusFilter, setStatusFilter] = useState(""); // '' means All posts
 
   // Fetch content with status filter
-  const {
-    contents,
-    loading,
-    error,
-    refetch: baseRefetch,
-  } = useContent({
-    status:
-      statusFilter === "All posts" ? undefined : statusFilter.slice(0, -1),
+  const { contents, loading, error, refetch: refetchHook } = useContent({
+    status: statusFilter,
   });
   // Refetch with status argument
   const refetch = (status?: string) => {
-    setStatusFilter(
-      status
-        ? status.charAt(0).toUpperCase() +
-            status.slice(1) +
-            (status.endsWith("s") ? "" : "s")
-        : "All posts"
-    );
-    baseRefetch();
+    const override = status ?? '';
+    try { console.debug('[Posts] refetch called, override:', override); } catch {}
+    setStatusFilter(override);
+    refetchHook(override);
   };
+
+  // Ensure a fetch runs when filter changes (especially switching back to All posts)
+  useEffect(() => {
+    try { console.debug('[Posts] statusFilter changed ->', statusFilter); } catch {}
+    refetchHook(statusFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
   const handleOnEdit = (id: number) => {
     setIsModalOpen(true);
@@ -102,7 +99,7 @@ const PostsScreen = () => {
   };
 
   const handleOnPreview = (id: number) => {
-    // TODO: Implement preview
+    window.open(`/preview/${id}`, "_blank");
   };
 
   if (loading) {
@@ -136,6 +133,12 @@ const PostsScreen = () => {
             <ContentListCore
               title={"Posts"}
               contents={contents}
+              filterValue={statusFilter ? statusFilter : 'ALL'}
+              onFilterChange={(v) => {
+                const override = v === 'ALL' ? '' : v;
+                setStatusFilter(override);
+                refetchHook(override);
+              }}
               onCreate={handleOnCreate}
               onEdit={handleOnEdit}
               onDelete={handleOnDelete}

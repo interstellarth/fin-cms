@@ -178,6 +178,8 @@ interface ContentListCoreProps {
   title?: string;
   onCreate?: () => void;
   refetch?: (status?: string) => void;
+  filterValue?: string;
+  onFilterChange?: (value: string) => void;
 }
 
 const ContentListCore = ({
@@ -190,11 +192,14 @@ const ContentListCore = ({
   title,
   onCreate,
   refetch,
+  filterValue,
+  onFilterChange,
 }: ContentListCoreProps) => {
   const theme = useTheme();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [postFilter, setPostFilter] = useState("All posts");
+  // UI values: 'ALL' | 'Draft' | 'Scheduled' | 'Published'
+  const [postFilter, setPostFilter] = useState("ALL");
   const [accessFilter, setAccessFilter] = useState("All access");
   const [authorFilter, setAuthorFilter] = useState("All authors");
   const [tagFilter, setTagFilter] = useState("All tags");
@@ -212,11 +217,25 @@ const ContentListCore = ({
   };
 
   const handlePostFilterChange = (value: string) => {
-    setPostFilter(value);
+    try { console.debug('[ContentListCore] filter change ->', value); } catch {}
+    // reset to first page when filter changes
+    setPage(0);
+    if (onFilterChange) onFilterChange(value);
+    else setPostFilter(value);
     if (refetch) {
-      refetch(value === "All posts" ? undefined : value.slice(0, -1));
+      const override = value === 'ALL' ? '' : value;
+      try { console.debug('[ContentListCore] call refetch with ->', override); } catch {}
+      refetch(override);
     }
   };
+
+  // If current page is out of range after contents change, clamp to 0
+  useEffect(() => {
+    const startIndex = page * rowsPerPage;
+    if (startIndex >= contents.length && page !== 0) {
+      setPage(0);
+    }
+  }, [contents.length, page, rowsPerPage]);
 
   const startIndex = page * rowsPerPage;
   const endIndex = startIndex + rowsPerPage;
@@ -237,11 +256,13 @@ const ContentListCore = ({
             {title === "Posts" && (
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <Select
-                  value={postFilter}
-                  onChange={(e) => handlePostFilterChange(e.target.value)}
+                  value={filterValue ?? postFilter}
+                  displayEmpty
+                  renderValue={(v) => (v && v !== 'ALL' ? String(v) : 'All posts')}
+                  onChange={(e) => handlePostFilterChange(String(e.target.value))}
                 >
-                  <MenuItem value="All posts">All posts</MenuItem>
-                  <MenuItem value="Drafts">Drafts</MenuItem>
+                  <MenuItem value="ALL">All posts</MenuItem>
+                  <MenuItem value="Draft">Drafts</MenuItem>
                   <MenuItem value="Scheduled">Scheduled</MenuItem>
                   <MenuItem value="Published">Published</MenuItem>
                 </Select>
@@ -307,9 +328,8 @@ const ContentListCore = ({
         {/* List of posts */}
         <List disablePadding>
           {paginatedContents.map((content, idx) => (
-            <>
+            <Box key={content.id}>
               <ListItem
-                key={content.id}
                 alignItems="flex-start"
                 sx={{
                   px: 0,
@@ -412,6 +432,7 @@ const ContentListCore = ({
                       />
                     </Stack>
                   }
+                  secondaryTypographyProps={{ component: "div" }}
                   secondary={
                     <Stack
                       direction="row"
@@ -427,7 +448,7 @@ const ContentListCore = ({
                 />
               </ListItem>
               {idx !== paginatedContents.length - 1 && <Divider />}
-            </>
+            </Box>
           ))}
         </List>
         <TablePagination

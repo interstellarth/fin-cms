@@ -12,12 +12,14 @@ export async function GET(req: NextRequest) {
         { status: 400 }
       );
     }
+    const idNum = Number(id);
     const { data, error } = await supabase
       .from("contents")
       .select("*")
-      .eq("id", id)
-      .eq("status", "Published")
-      .single();
+      .eq("id", Number.isNaN(idNum) ? id : idNum)
+      // Allow preview for any status. If you want only published, uncomment next line.
+      // .eq("status", "Published")
+      .maybeSingle();
 
     if (error || !data) {
       return NextResponse.json({ error: "Content not found" }, { status: 404 });
