@@ -60,7 +60,7 @@ const PublishedScreen = () => {
   };
 
   const handleOnPreview = (id: number) => {
-    // TODO: Implement preview
+    window.open(`/preview/${id}`, "_blank");
   };
 
   const handleOnCreate = () => {

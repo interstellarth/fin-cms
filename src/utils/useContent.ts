@@ -31,6 +31,10 @@ export const useContent = (options: UseContentOptions = {}) => {
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // keep an internal status state so we can refetch with overrides
+  const [statusState, setStatusState] = useState<string | undefined>(
+    options.status
+  );
   const [pagination, setPagination] = useState({
     total: 0,
     page: 1,
@@ -38,18 +42,27 @@ export const useContent = (options: UseContentOptions = {}) => {
     totalPages: 0,
   });
 
-  const fetchContents = useCallback(async () => {
+  // keep internal status in sync when hook options change
+  useEffect(() => {
+    setStatusState(options.status);
+  }, [options.status]);
+
+  const fetchWith = useCallback(async (overrideStatus?: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
-      if (options.status) params.append("status", options.status);
+      const effStatus = overrideStatus ?? statusState;
+      if (effStatus) params.append("status", effStatus);
       if (options.search) params.append("search", options.search);
       if (options.page) params.append("page", options.page.toString());
       if (options.limit) params.append("limit", options.limit.toString());
 
-      const response = await fetch(`/api/contents?${params.toString()}`);
+      const qs = params.toString();
+      const url = `/api/contents${qs ? `?${qs}` : ""}`;
+      try { console.debug('[useContent] fetch', url); } catch {}
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error("Failed to fetch contents");
@@ -68,14 +81,20 @@ export const useContent = (options: UseContentOptions = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [options.status, options.search, options.page, options.limit]);
+  }, [statusState, options.search, options.page, options.limit]);
 
   useEffect(() => {
-    fetchContents();
-  }, [fetchContents]);
+    fetchWith();
+  }, [fetchWith]);
 
-  const refetch = () => {
-    fetchContents();
+  const refetch = (overrideStatus?: string) => {
+    if (typeof overrideStatus !== "undefined") {
+      // optimistic sync
+      setStatusState(overrideStatus);
+      fetchWith(overrideStatus);
+    } else {
+      fetchWith();
+    }
   };
 
   return {
