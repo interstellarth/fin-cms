@@ -42,7 +42,15 @@ const PostsScreen = () => {
   const handleOnEdit = (id: number) => {
     setIsModalOpen(true);
     setIsEditMode(true);
-    setEditContent(contents.find((content) => content.id === id));
+    const row = contents.find((content) => content.id === id);
+    if (row) {
+      // Map DB fields to UI fields for modal convenience
+      setEditContent({
+        ...row,
+        tag: (row as any).tag ?? (row as any).tag_name ?? "",
+        category: (row as any).category ?? (row as any).category_name ?? "",
+      });
+    }
   };
 
   const handleOnCreate = () => {
@@ -54,6 +62,8 @@ const PostsScreen = () => {
       textHtml: "",
       banner: "",
       status: "Draft",
+      tag: "",
+      category: "",
       createdBy: user.username || "",
       createdDate: "",
       updatedBy: "",

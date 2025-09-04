@@ -28,7 +28,8 @@ import {
   IconEye,
 } from "@tabler/icons-react";
 import DashboardCard from "@/app/(DashboardLayout)//components/shared/DashboardCard";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import EditContentModal from "../modal/EditContentModal";
 
 // Helper for 'time ago' (simple version)
@@ -180,9 +181,29 @@ const ContentList = () => {
 
   // Filters (dummy, not functional)
   const [postFilter, setPostFilter] = useState("All posts");
-  const [accessFilter, setAccessFilter] = useState("All access");
-  const [authorFilter, setAuthorFilter] = useState("All authors");
+  // Hidden filters (kept for future use)
+  // const [accessFilter, setAccessFilter] = useState("All access");
+  // const [authorFilter, setAuthorFilter] = useState("All authors");
   const [tagFilter, setTagFilter] = useState("All tags");
+  const [categoryFilter, setCategoryFilter] = useState("All categories");
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [{ data: tags }, { data: categories }] = await Promise.all([
+          supabase.from("tags").select("name").order("name", { ascending: true }),
+          supabase.from("categories").select("name").order("name", { ascending: true }),
+        ]);
+        if (!mounted) return;
+        setTagOptions((tags || []).map((t: any) => t.name).filter(Boolean));
+        setCategoryOptions((categories || []).map((c: any) => c.name).filter(Boolean));
+      } catch {}
+    })();
+    return () => { mounted = false; };
+  }, []);
   const [sortFilter, setSortFilter] = useState("Newest first");
 
   const handleMenuClick = (
@@ -269,6 +290,7 @@ const ContentList = () => {
                 <MenuItem value="Published">Published</MenuItem>
               </Select>
             </FormControl>
+            {/*
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
                 value={accessFilter}
@@ -285,12 +307,27 @@ const ContentList = () => {
                 <MenuItem value="All authors">All authors</MenuItem>
               </Select>
             </FormControl>
+            */}
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
                 value={tagFilter}
                 onChange={(e) => setTagFilter(e.target.value)}
               >
                 <MenuItem value="All tags">All tags</MenuItem>
+                {tagOptions.map((t) => (
+                  <MenuItem key={t} value={t}>{t}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <Select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <MenuItem value="All categories">All categories</MenuItem>
+                {categoryOptions.map((c) => (
+                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                ))}
               </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -316,7 +353,15 @@ const ContentList = () => {
     >
       {/* List of posts */}
       <List disablePadding>
-        {contents.map((content, idx) => (
+        {contents
+          .filter((c) => {
+            const tagValue = (c as any).tag_name ?? (c as any).tag ?? '';
+            const catValue = (c as any).category_name ?? (c as any).category ?? '';
+            const tagOk = !tagFilter || tagFilter === 'All tags' || String(tagValue).toLowerCase() === String(tagFilter).toLowerCase();
+            const catOk = !categoryFilter || categoryFilter === 'All categories' || String(catValue).toLowerCase() === String(categoryFilter).toLowerCase();
+            return tagOk && catOk;
+          })
+          .map((content, idx) => (
           <>
             <ListItem
               key={content.id}

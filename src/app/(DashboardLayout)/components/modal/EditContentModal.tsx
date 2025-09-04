@@ -46,6 +46,9 @@ type Content = {
   textHtml: string;
   banner: string;
   status: string;
+  // UI-only fields for now
+  tag?: string;
+  category?: string;
   createdBy?: string;
   createdDate?: string;
   updatedBy?: string;
@@ -96,6 +99,26 @@ const EditContentModal: FC<EditContentModalProps> = ({
       },
     },
   });
+
+  // Options loaded from DB (fallback to empty arrays)
+  const [TAG_OPTIONS, setTagOptions] = useState<string[]>([]);
+  const [CATEGORY_OPTIONS, setCategoryOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const [{ data: tags }, { data: categories }] = await Promise.all([
+          supabase.from('tags').select('name').order('name', { ascending: true }),
+          supabase.from('categories').select('name').order('name', { ascending: true }),
+        ]);
+        if (!isMounted) return;
+        setTagOptions((tags || []).map((t: any) => t.name).filter(Boolean));
+        setCategoryOptions((categories || []).map((c: any) => c.name).filter(Boolean));
+      } catch {}
+    })();
+    return () => { isMounted = false; };
+  }, []);
 
   // sync when open new record
   useEffect(() => {
@@ -418,6 +441,44 @@ const EditContentModal: FC<EditContentModalProps> = ({
               <MenuItem value="Draft">Draft</MenuItem>
               <MenuItem value="Published">Published</MenuItem>
               <MenuItem value="Archived">Archived</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Tag dropdown */}
+          <FormControl fullWidth>
+            <InputLabel>Tag</InputLabel>
+            <Select
+              value={(content as any).tag ?? (content as any).tag_name ?? ""}
+              label="Tag"
+              onChange={(e) => onChange("tag", e.target.value)}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {TAG_OPTIONS.map((t) => (
+                <MenuItem key={t} value={t}>
+                  {t}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* Category dropdown */}
+          <FormControl fullWidth>
+            <InputLabel>Category</InputLabel>
+            <Select
+              value={(content as any).category ?? (content as any).category_name ?? ""}
+              label="Category"
+              onChange={(e) => onChange("category", e.target.value)}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {CATEGORY_OPTIONS.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 

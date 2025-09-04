@@ -72,6 +72,10 @@ export async function POST(req: NextRequest) {
       banner,
       createdBy,
       status = "Draft",
+      tag,
+      category,
+      tag_name,
+      category_name,
     } = await req.json();
 
     if (!title || !textHtml || !createdBy) {
@@ -81,17 +85,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Attempt to include optional tag/category fields if columns exist.
+    const insertPayload: any = {
+      title,
+      textHtml,
+      banner,
+      createdBy,
+      status,
+      createdDate: new Date().toISOString(),
+      updatedDate: new Date().toISOString(),
+    };
+    // Map UI fields to DB columns
+    if (typeof tag !== 'undefined' || typeof tag_name !== 'undefined') {
+      insertPayload.tag_name = (tag ?? tag_name) || null;
+    }
+    if (typeof category !== 'undefined' || typeof category_name !== 'undefined') {
+      insertPayload.category_name = (category ?? category_name) || null;
+    }
+
     const { data, error } = await supabase
       .from("contents")
-      .insert({
-        title,
-        textHtml,
-        banner,
-        createdBy,
-        status,
-        createdDate: new Date().toISOString(),
-        updatedDate: new Date().toISOString(),
-      })
+      .insert(insertPayload)
       .select()
       .single();
 

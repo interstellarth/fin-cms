@@ -10,6 +10,10 @@ interface Content {
   updatedBy: string;
   updatedDate: string;
   status: string;
+  tag?: string;
+  category?: string;
+  tag_name?: string;
+  category_name?: string;
 }
 
 interface ContentResponse {

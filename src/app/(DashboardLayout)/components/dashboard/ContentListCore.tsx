@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import { IconPencil, IconTrash, IconEye, IconPlus } from "@tabler/icons-react";
 import { ReactNode, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import DashboardCard from "../shared/DashboardCard";
 import { useTheme } from "@mui/material/styles";
 
@@ -200,9 +201,13 @@ const ContentListCore = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   // UI values: 'ALL' | 'Draft' | 'Scheduled' | 'Published'
   const [postFilter, setPostFilter] = useState("ALL");
-  const [accessFilter, setAccessFilter] = useState("All access");
-  const [authorFilter, setAuthorFilter] = useState("All authors");
+  // Hidden filters (kept for future use)
+  // const [accessFilter, setAccessFilter] = useState("All access");
+  // const [authorFilter, setAuthorFilter] = useState("All authors");
   const [tagFilter, setTagFilter] = useState("All tags");
+  const [categoryFilter, setCategoryFilter] = useState("All categories");
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [sortFilter, setSortFilter] = useState("Newest first");
 
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -229,17 +234,50 @@ const ContentListCore = ({
     }
   };
 
-  // If current page is out of range after contents change, clamp to 0
+  // Load tags and categories for filters (UI only for now)
   useEffect(() => {
-    const startIndex = page * rowsPerPage;
-    if (startIndex >= contents.length && page !== 0) {
-      setPage(0);
-    }
-  }, [contents.length, page, rowsPerPage]);
+    let isMounted = true;
+    (async () => {
+      try {
+        const [{ data: tags }, { data: categories }] = await Promise.all([
+          supabase.from("tags").select("name").order("name", { ascending: true }),
+          supabase.from("categories").select("name").order("name", { ascending: true }),
+        ]);
+        if (!isMounted) return;
+        setTagOptions((tags || []).map((t: any) => t.name).filter(Boolean));
+        setCategoryOptions((categories || []).map((c: any) => c.name).filter(Boolean));
+      } catch (e) {
+        // ignore for UI-only
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Apply local filtering by tag/category (status is handled upstream)
+  const filteredContents = contents.filter((c) => {
+    const tagValue = (c as any).tag_name ?? (c as any).tag ?? '';
+    const catValue = (c as any).category_name ?? (c as any).category ?? '';
+    const tagOk =
+      !tagFilter || tagFilter === 'All tags' ||
+      String(tagValue).toLowerCase() === String(tagFilter).toLowerCase();
+    const catOk =
+      !categoryFilter || categoryFilter === 'All categories' ||
+      String(catValue).toLowerCase() === String(categoryFilter).toLowerCase();
+    return tagOk && catOk;
+  });
 
   const startIndex = page * rowsPerPage;
   const endIndex = startIndex + rowsPerPage;
-  const paginatedContents = contents.slice(startIndex, endIndex);
+  const paginatedContents = filteredContents.slice(startIndex, endIndex);
+
+  // If current page is out of range after contents change, clamp to 0
+  useEffect(() => {
+    const firstIndex = page * rowsPerPage;
+    const currentLength = filteredContents.length;
+    if (firstIndex >= currentLength && page !== 0) {
+      setPage(0);
+    }
+  }, [filteredContents.length, page, rowsPerPage]);
 
   return (
     <DashboardCard
@@ -268,6 +306,7 @@ const ContentListCore = ({
                 </Select>
               </FormControl>
             )}
+            {/*
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
                 value={accessFilter}
@@ -284,12 +323,27 @@ const ContentListCore = ({
                 <MenuItem value="All authors">All authors</MenuItem>
               </Select>
             </FormControl>
+            */}
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
                 value={tagFilter}
                 onChange={(e) => setTagFilter(e.target.value)}
               >
                 <MenuItem value="All tags">All tags</MenuItem>
+                {tagOptions.map((t) => (
+                  <MenuItem key={t} value={t}>{t}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <Select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <MenuItem value="All categories">All categories</MenuItem>
+                {categoryOptions.map((c) => (
+                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                ))}
               </Select>
             </FormControl>
             <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -454,7 +508,7 @@ const ContentListCore = ({
         <TablePagination
           rowsPerPageOptions={[5, 10, 25]}
           component="div"
-          count={contents.length}
+          count={filteredContents.length}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}
