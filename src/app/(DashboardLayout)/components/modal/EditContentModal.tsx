@@ -38,7 +38,6 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
-import Heading from "@tiptap/extension-heading";
 import { supabase } from "@/lib/supabase";
 
 type Content = {
@@ -83,7 +82,6 @@ const EditContentModal: FC<EditContentModalProps> = ({
       Underline,
       Image,
       Link.configure({ openOnClick: false }),
-      Heading.configure({ levels: [1, 2, 3] }),
     ],
     content: content?.textHtml || "",
     onUpdate: ({ editor }) => {
@@ -102,7 +100,7 @@ const EditContentModal: FC<EditContentModalProps> = ({
   // sync when open new record
   useEffect(() => {
     if (editor && content) {
-      editor.commands.setContent(content.textHtml || "", false);
+      editor.commands.setContent(content.textHtml || "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, content?.id]);
