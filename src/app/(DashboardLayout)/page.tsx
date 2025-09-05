@@ -1,8 +1,8 @@
 "use client";
 import { Grid, Box } from "@mui/material";
 import PageContainer from "@/app/(DashboardLayout)/components/container/PageContainer";
-import SalesOverview from "@/app/(DashboardLayout)/components/dashboard/SalesOverview";
-import RecentTransactions from "@/app/(DashboardLayout)/components/dashboard/RecentTransactions";
+import PostOverview from "@/app/(DashboardLayout)/components/dashboard/PostOverview";
+import RecentPosts from "@/app/(DashboardLayout)/components/dashboard/RecentPosts";
 
 const Dashboard = () => {
   return (
@@ -15,7 +15,7 @@ const Dashboard = () => {
               lg: 8,
             }}
           >
-            <SalesOverview />
+            <PostOverview />
           </Grid>
           <Grid
             size={{
@@ -23,7 +23,7 @@ const Dashboard = () => {
               lg: 4,
             }}
           >
-            <RecentTransactions />
+            <RecentPosts />
           </Grid>
         </Grid>
       </Box>
