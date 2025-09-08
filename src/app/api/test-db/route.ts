@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const action = searchParams.get("action");
+    if (action === "seed") {
+      await seedSampleData();
+      return NextResponse.json({ status: "success", message: "Sample data seeded" });
+    }
+    if (action === "reset") {
+      await resetDatabase();
+      return NextResponse.json({ status: "success", message: "Database reset" });
+    }
     // Test Supabase connection
-    const { data: testData, error: testError } = await supabase
+    const client = supabaseAdmin ?? supabase;
+    const { data: testData, error: testError } = await client
       .from("contents")
       .select("count", { count: "exact", head: true });
 
@@ -20,11 +32,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Get counts
-    const { count: contentCount } = await supabase
+    const { count: contentCount } = await client
       .from("contents")
       .select("*", { count: "exact", head: true });
 
-    const { count: userCount } = await supabase
+    const { count: userCount } = await client
       .from("users")
       .select("*", { count: "exact", head: true });
 
@@ -95,7 +107,8 @@ export async function POST(req: NextRequest) {
 
 async function seedSampleData() {
   // Seed users
-  await supabase.from("users").upsert(
+  const db = supabaseAdmin ?? supabase;
+  await db.from("users").upsert(
     [
       {
         username: "admin",
@@ -126,7 +139,7 @@ async function seedSampleData() {
   );
 
   // Seed categories
-  await supabase.from("categories").upsert(
+  await db.from("categories").upsert(
     [
       {
         name: "Technology",
@@ -157,7 +170,7 @@ async function seedSampleData() {
   );
 
   // Seed tags
-  await supabase.from("tags").upsert(
+  await db.from("tags").upsert(
     [
       {
         name: "React",
@@ -189,7 +202,7 @@ async function seedSampleData() {
   );
 
   // Seed contents
-  await supabase.from("contents").upsert(
+  await db.from("contents").upsert(
     [
       {
         title: "Getting Started with React",
@@ -230,14 +243,93 @@ async function seedSampleData() {
     ],
     { onConflict: "id" }
   );
+
+  // Link contents to categories and tags for demo metrics
+  // Fetch IDs
+  const { data: allContents } = await db
+    .from("contents")
+    .select("id,title");
+  const { data: allCats } = await db
+    .from("categories")
+    .select("id,name");
+  const { data: allTags } = await db
+    .from("tags")
+    .select("id,name");
+
+  const findId = (arr: any[] | null, key: string, val: string) =>
+    (arr || []).find((r) => String(r[key]).toLowerCase() === val.toLowerCase())?.id as number | undefined;
+
+  const cReact = findId(allContents, "title", "Getting Started with React");
+  const cDraft = findId(allContents, "title", "Draft Article");
+  const cSched = findId(allContents, "title", "Scheduled Post");
+  const cAnother = findId(allContents, "title", "Another Draft");
+
+  const catTech = findId(allCats, "name", "Technology");
+  const catDesign = findId(allCats, "name", "Design");
+  const catMarketing = findId(allCats, "name", "Marketing");
+  const catTutorials = findId(allCats, "name", "Tutorials");
+
+  const tagReact = findId(allTags, "name", "React");
+  const tagNext = findId(allTags, "name", "Next.js");
+  const tagDesign = findId(allTags, "name", "Design");
+  const tagTutorial = findId(allTags, "name", "Tutorial");
+  const tagTips = findId(allTags, "name", "Tips");
+
+  // Compose relation base tuples (contentId, categoryId / tagId)
+  const catPairs: Array<[number, number]> = [];
+  const tagPairs: Array<[number, number]> = [];
+
+  if (cReact && catTech) catPairs.push([cReact, catTech]);
+  if (cDraft && catDesign) catPairs.push([cDraft, catDesign]);
+  if (cSched && catMarketing) catPairs.push([cSched, catMarketing]);
+  if (cAnother && catTutorials) catPairs.push([cAnother, catTutorials]);
+
+  if (cReact && tagReact) tagPairs.push([cReact, tagReact]);
+  if (cReact && tagNext) tagPairs.push([cReact, tagNext]);
+  if (cDraft && tagDesign) tagPairs.push([cDraft, tagDesign]);
+  if (cSched && tagTutorial) tagPairs.push([cSched, tagTutorial]);
+  if (cAnother && tagTips) tagPairs.push([cAnother, tagTips]);
+
+  // Helper to try multiple naming styles
+  const tryInsert = async (
+    table: string,
+    pairs: Array<[number, number]>,
+    names: [string, string][]
+  ) => {
+    for (const [aName, bName] of names) {
+      const payload = pairs.map(([a, b]) => ({ [aName]: a, [bName]: b }));
+      const { error } = await db.from(table).insert(payload as any);
+      if (!error) return true;
+      // Continue trying next naming if column missing
+      if (String(error.code) !== "42703") {
+        // Unexpected error; still try next variant, but log
+        console.warn(`Seed ${table} insert failed (${aName}, ${bName}):`, error.message);
+      }
+    }
+    return false;
+  };
+
+  if (catPairs.length)
+    await tryInsert("content_categories", catPairs, [
+      ["contentid", "categoryid"],
+      ["contentId", "categoryId"],
+      ["content_id", "category_id"],
+    ]);
+  if (tagPairs.length)
+    await tryInsert("content_tags", tagPairs, [
+      ["contentid", "tagid"],
+      ["contentId", "tagId"],
+      ["content_id", "tag_id"],
+    ]);
 }
 
 async function resetDatabase() {
   // Clear all data (in reverse order due to foreign keys)
-  await supabase.from("content_tags").delete().neq("contentId", 0);
-  await supabase.from("content_categories").delete().neq("contentId", 0);
-  await supabase.from("contents").delete().neq("id", 0);
-  await supabase.from("categories").delete().neq("id", 0);
-  await supabase.from("tags").delete().neq("id", 0);
-  await supabase.from("users").delete().neq("id", 0);
+  const db = supabaseAdmin ?? supabase;
+  await db.from("content_tags").delete().neq("contentid", 0);
+  await db.from("content_categories").delete().neq("contentid", 0);
+  await db.from("contents").delete().neq("id", 0);
+  await db.from("categories").delete().neq("id", 0);
+  await db.from("tags").delete().neq("id", 0);
+  await db.from("users").delete().neq("id", 0);
 }
