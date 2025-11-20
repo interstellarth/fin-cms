@@ -1,23 +1,30 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export default function PreviewPage({ params }: { params: { id: string } }) {
+type Params = { id: string };
+
+export default function PreviewPage({ params }: { params: Promise<Params> }) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       try {
-        const res = await fetch(`/api/public/contents/detail?id=${encodeURIComponent(params.id)}`);
+        const { id } = await params;
+        const res = await fetch(`/api/public/contents/detail?id=${encodeURIComponent(id)}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Failed to load");
-        setData(json.data);
+        if (active) setData(json.data);
       } catch (e: any) {
-        setError(e?.message || "Failed to load");
+        if (active) setError(e?.message || "Failed to load");
       }
     };
     load();
-  }, [params.id]);
+    return () => {
+      active = false;
+    };
+  }, [params]);
 
   if (error) return <div style={{ padding: 24 }}>Preview error: {error}</div>;
   if (!data) return <div style={{ padding: 24 }}>Loading preview…</div>;
@@ -33,4 +40,3 @@ export default function PreviewPage({ params }: { params: { id: string } }) {
     </div>
   );
 }
-

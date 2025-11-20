@@ -7,12 +7,12 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-type Ctx = { params: { id: string } } | { params: Promise<{ id: string }> };
+type Ctx = { params: Promise<{ id: string }> };
 async function readId(ctx: Ctx): Promise<string> {
+  const params = (ctx as any)?.params;
   // Support Next.js where params can be a promise
-  // @ts-ignore
-  if (ctx?.params?.then) return (await (ctx as any).params).id;
-  return (ctx as any)?.params?.id;
+  if (params?.then) return (await params).id;
+  return params?.id;
 }
 
 export async function GET(_req: NextRequest, ctx: Ctx) {

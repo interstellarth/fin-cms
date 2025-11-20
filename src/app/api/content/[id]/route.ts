@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-type Ctx = { params: { id: string } } | { params: Promise<{ id: string }> };
-async function readId(ctx: Ctx): Promise<string> {
-  // @ts-ignore - some Next versions pass a Promise
-  if (ctx?.params?.then) return (await (ctx as any).params).id;
-  return (ctx as any)?.params?.id;
+type Context = { params: Promise<{ id: string }> };
+async function readId(ctx: Context): Promise<string> {
+  const params = (ctx as any)?.params;
+  // Some Next releases passed params as a Promise; handle both shapes safely.
+  if (params?.then) return (await params).id;
+  return params?.id;
 }
 
-export async function PUT(req: NextRequest, ctx: Ctx) {
+export async function PUT(req: NextRequest, ctx: Context) {
   try {
     const id = await readId(ctx);
     const idNum = Number(id);
@@ -38,7 +39,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   }
 }
 
-export async function DELETE(_req: NextRequest, ctx: Ctx) {
+export async function DELETE(_req: NextRequest, ctx: Context) {
   try {
     const id = await readId(ctx);
     const idNum = Number(id);
@@ -59,4 +60,3 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: e?.message || "Failed to delete content" }, { status: 500 });
   }
 }
-

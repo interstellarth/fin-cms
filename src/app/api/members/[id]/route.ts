@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+type Ctx = { params: Promise<{ id: string }> };
 // In some Next.js versions, params can be a Promise. Await it to avoid warnings.
-type ParamsPromise = { params: Promise<{ id: string }> } | { params: { id: string } };
-async function readId(ctx: any): Promise<string> {
-  if (ctx?.params?.then) {
-    const p = await ctx.params;
+async function readId(ctx: Ctx): Promise<string> {
+  const params = (ctx as any)?.params;
+  if (params?.then) {
+    const p = await params;
     return p.id;
   }
-  return ctx?.params?.id;
+  return params?.id;
 }
 
 // Get a single member by id
-export async function GET(_req: Request, ctx: ParamsPromise) {
+export async function GET(_req: Request, ctx: Ctx) {
   const id = await readId(ctx);
   const { data, error } = await supabase
     .from("members")
@@ -27,7 +28,7 @@ export async function GET(_req: Request, ctx: ParamsPromise) {
 }
 
 // Update a member by id
-export async function PUT(req: Request, ctx: ParamsPromise) {
+export async function PUT(req: Request, ctx: Ctx) {
   try {
     const id = await readId(ctx);
     const updates = await req.json();
@@ -53,7 +54,7 @@ export async function PUT(req: Request, ctx: ParamsPromise) {
 }
 
 // Delete a member by id
-export async function DELETE(_req: Request, ctx: ParamsPromise) {
+export async function DELETE(_req: Request, ctx: Ctx) {
   const id = await readId(ctx);
   const { error } = await supabase.from("members").delete().eq("id", id);
   if (error) {
