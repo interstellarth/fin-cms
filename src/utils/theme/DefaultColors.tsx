@@ -1,12 +1,6 @@
 import { createTheme } from "@mui/material/styles";
-import { Plus_Jakarta_Sans } from "next/font/google";
-
-export const plus = Plus_Jakarta_Sans({
-  weight: ["300", "400", "500", "600", "700"],
-  subsets: ["latin"],
-  display: "swap",
-  fallback: ["Helvetica", "Arial", "sans-serif"],
-});
+// Use a local-safe font stack so builds do not depend on downloading Google Fonts.
+const fontFamily = '"Plus Jakarta Sans", "Helvetica", "Arial", "sans-serif"';
 
 const baselightTheme = createTheme({
   direction: "ltr",
@@ -70,24 +64,24 @@ const baselightTheme = createTheme({
     },
   },
   typography: {
-    fontFamily: plus.style.fontFamily,
+    fontFamily,
     h1: {
       fontWeight: 600,
       fontSize: "2.25rem",
       lineHeight: "2.75rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h2: {
       fontWeight: 600,
       fontSize: "1.875rem",
       lineHeight: "2.25rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h3: {
       fontWeight: 600,
       fontSize: "1.5rem",
       lineHeight: "1.75rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h4: {
       fontWeight: 600,
@@ -209,24 +203,24 @@ const basedarkTheme = createTheme({
     },
   },
   typography: {
-    fontFamily: plus.style.fontFamily,
+    fontFamily,
     h1: {
       fontWeight: 600,
       fontSize: "2.25rem",
       lineHeight: "2.75rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h2: {
       fontWeight: 600,
       fontSize: "1.875rem",
       lineHeight: "2.25rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h3: {
       fontWeight: 600,
       fontSize: "1.5rem",
       lineHeight: "1.75rem",
-      fontFamily: plus.style.fontFamily,
+      fontFamily,
     },
     h4: {
       fontWeight: 600,

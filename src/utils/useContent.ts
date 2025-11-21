@@ -10,6 +10,16 @@ interface Content {
   updatedBy: string;
   updatedDate: string;
   status: string;
+  description?: string;
+  metaTitle?: string;
+  metaDesc?: string;
+  canonicalUrl?: string;
+  xTitle?: string;
+  xDesc?: string;
+  fbTitle?: string;
+  fbDesc?: string;
+  tagHeader?: string;
+  tagFooter?: string;
 }
 
 interface ContentResponse {

@@ -46,6 +46,16 @@ type Content = {
   textHtml: string;
   banner: string;
   status: string;
+  description?: string;
+  metaTitle?: string;
+  metaDesc?: string;
+  canonicalUrl?: string;
+  xTitle?: string;
+  xDesc?: string;
+  fbTitle?: string;
+  fbDesc?: string;
+  tagHeader?: string;
+  tagFooter?: string;
   createdBy?: string;
   createdDate?: string;
   updatedBy?: string;
@@ -257,6 +267,12 @@ const EditContentModal: FC<EditContentModalProps> = ({
     setImageUrl("");
   };
 
+  const fieldValue = (key: keyof Content) =>
+    ((content as any)?.[key] as string | number | undefined) ?? "";
+
+  // Keep labels floated so they never overlap with borders on multiline fields.
+  const floatingLabelProps = { InputLabelProps: { shrink: true } };
+
   return (
     <>
       <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -420,6 +436,98 @@ const EditContentModal: FC<EditContentModalProps> = ({
               <MenuItem value="Archived">Archived</MenuItem>
             </Select>
           </FormControl>
+
+          <TextField
+            label="Description"
+            value={fieldValue("description")}
+            onChange={(e) => onChange("description", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={3}
+            fullWidth
+          />
+
+          <TextField
+            label="Meta Title"
+            value={fieldValue("metaTitle")}
+            onChange={(e) => onChange("metaTitle", e.target.value)}
+            {...floatingLabelProps}
+            fullWidth
+          />
+
+          <TextField
+            label="Meta Description"
+            value={fieldValue("metaDesc")}
+            onChange={(e) => onChange("metaDesc", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={2}
+            fullWidth
+          />
+
+          <TextField
+            label="Canonical URL"
+            value={fieldValue("canonicalUrl")}
+            onChange={(e) => onChange("canonicalUrl", e.target.value)}
+            {...floatingLabelProps}
+            fullWidth
+          />
+
+          <TextField
+            label="X Title"
+            value={fieldValue("xTitle")}
+            onChange={(e) => onChange("xTitle", e.target.value)}
+            {...floatingLabelProps}
+            fullWidth
+          />
+
+          <TextField
+            label="X Description"
+            value={fieldValue("xDesc")}
+            onChange={(e) => onChange("xDesc", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={2}
+            fullWidth
+          />
+
+          <TextField
+            label="Facebook Title"
+            value={fieldValue("fbTitle")}
+            onChange={(e) => onChange("fbTitle", e.target.value)}
+            {...floatingLabelProps}
+            fullWidth
+          />
+
+          <TextField
+            label="Facebook Description"
+            value={fieldValue("fbDesc")}
+            onChange={(e) => onChange("fbDesc", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={2}
+            fullWidth
+          />
+
+          <TextField
+            label="Tag Header (Code Injection)"
+            value={fieldValue("tagHeader")}
+            onChange={(e) => onChange("tagHeader", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={3}
+            fullWidth
+          />
+
+          <TextField
+            label="Tag Footer (Code Injection)"
+            value={fieldValue("tagFooter")}
+            onChange={(e) => onChange("tagFooter", e.target.value)}
+            {...floatingLabelProps}
+            multiline
+            rows={3}
+            fullWidth
+          />
 
           {isEditMode && (
             <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
