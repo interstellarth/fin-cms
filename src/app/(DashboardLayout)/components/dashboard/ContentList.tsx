@@ -198,7 +198,22 @@ const ContentList = () => {
   };
   const handleCreate = () => {
     setIsEditMode(false);
-    setEditContent({ title: "", textHtml: "", banner: "", status: "Draft" });
+    setEditContent({
+      title: "",
+      textHtml: "",
+      banner: "",
+      status: "Draft",
+      description: "",
+      metaTitle: "",
+      metaDesc: "",
+      canonicalUrl: "",
+      xTitle: "",
+      xDesc: "",
+      fbTitle: "",
+      fbDesc: "",
+      tagHeader: "",
+      tagFooter: "",
+    });
     setIsModalOpen(true);
   };
   const handleEdit = (id: number) => {

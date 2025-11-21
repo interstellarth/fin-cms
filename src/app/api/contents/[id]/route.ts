@@ -38,7 +38,23 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const id = await readId(ctx);
     const idNum = Number(id);
     const body = await req.json();
-    const { title, textHtml, banner, updatedBy, status } = body || {};
+    const {
+      title,
+      textHtml,
+      banner,
+      updatedBy,
+      status,
+      description,
+      metaTitle,
+      metaDesc,
+      canonicalUrl,
+      xTitle,
+      xDesc,
+      fbTitle,
+      fbDesc,
+      tagHeader,
+      tagFooter,
+    } = body || {};
 
     // Check if content exists
     const { data: existingContent } = await supabase
@@ -59,6 +75,16 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     if (typeof banner !== "undefined") updateData.banner = banner;
     if (typeof updatedBy !== "undefined") updateData.updatedBy = updatedBy;
     if (typeof status !== "undefined") updateData.status = status;
+    if (typeof description !== "undefined") updateData.description = description;
+    if (typeof metaTitle !== "undefined") updateData.metaTitle = metaTitle;
+    if (typeof metaDesc !== "undefined") updateData.metaDesc = metaDesc;
+    if (typeof canonicalUrl !== "undefined") updateData.canonicalUrl = canonicalUrl;
+    if (typeof xTitle !== "undefined") updateData.xTitle = xTitle;
+    if (typeof xDesc !== "undefined") updateData.xDesc = xDesc;
+    if (typeof fbTitle !== "undefined") updateData.fbTitle = fbTitle;
+    if (typeof fbDesc !== "undefined") updateData.fbDesc = fbDesc;
+    if (typeof tagHeader !== "undefined") updateData.tagHeader = tagHeader;
+    if (typeof tagFooter !== "undefined") updateData.tagFooter = tagFooter;
 
     const { data, error } = await supabase
       .from("contents")
